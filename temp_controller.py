@@ -252,7 +252,7 @@ def get_signal_status():
     with state_lock:
         return signal_status
 
-if _name_ == "_main_":
+if __name__ == "__main__":
     srv = SimpleXMLRPCServer(("0.0.0.0", 8000), allow_none=True)
     srv.register_function(signal_controller, "signal_controller")
     srv.register_function(vip_arrival, "vip_arrival")
