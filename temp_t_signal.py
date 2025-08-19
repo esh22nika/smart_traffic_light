@@ -53,7 +53,7 @@ def set_time(new_time):
     return "OK"
 
 # ---- RPC server for Berkeley ----
-if _name_ == "_main_":
+if __name__ == "__main__":
     t = threading.Thread(target=traffic_detection_loop, daemon=True)
     t.start()
 
