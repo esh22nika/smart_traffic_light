@@ -27,7 +27,7 @@ def set_time(new_time):
     print(f"[{MY_NAME}] ⏳ set_time → new_skew={local_skew:+.2f}s (local={time.ctime(now)})")
     return "OK"
 
-if _name_ == "_main_":
+if __name__ == "__main__":
     server = SimpleXMLRPCServer(("0.0.0.0", MY_PORT), allow_none=True)
     server.register_function(p_signal, "p_signal")
     server.register_function(get_clock_value, "get_clock_value")
