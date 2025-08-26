@@ -7,8 +7,8 @@ import threading
 
 # ---------------- CONFIG ----------------
 CLIENTS = {
-    "t_signal": "http://192.168.0.5:7000",  # change to your t_signal host:port
-    "p_signal": "http://192.168.0.176:9000",   # change to your p_signal host:port
+    "t_signal": "http://172.16.182.10:7000",  # change to your t_signal host:port
+    "p_signal": "http://172.16.182.3:9000",   # change to your p_signal host:port
 }
 PEDESTRIAN_IP = CLIENTS["p_signal"]
 RESPONSE_TIMEOUT = 5
@@ -169,10 +169,11 @@ def _switch_to(target_pair):
     Perform the same steps you already had: pedestrians + traffic updates
     so that 'target_pair' becomes GREEN at the end.
     """
-    # Pedestrians first
-    handle_pedestrian_signals(target_pair)
     # Then traffic lights
     handle_traffic_signals(target_pair)
+    # Pedestrians first
+    handle_pedestrian_signals(target_pair)
+
 
 # -------- Normal (non-VIP) requests -------
 def signal_controller(target_pair):
