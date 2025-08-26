@@ -22,8 +22,8 @@ vip_pending = {"12": False, "34": False}
 
 # ------------- Timeout transport ----------
 class TimeoutTransport(Transport):
-    def _init_(self, timeout):
-        super()._init_()
+    def __init__(self, timeout):
+        super().__init__()
         self.timeout = timeout
     def make_connection(self, host):
         conn = super().make_connection(host)
