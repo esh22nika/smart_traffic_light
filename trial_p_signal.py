@@ -18,10 +18,10 @@ MY_NAME = "p_signal"
 local_skew = -45 * 60
 
 # Load balancing awareness (for logging/debugging)
-ZOOKEEPER_IP = "http://192.168.0.170:6000"
+ZOOKEEPER_IP = "http://192.168.0.168:6000"
 CONTROLLERS = {
     "controller": "http://192.168.0.168:8000",
-    "controller_clone": "http://192.168.0.169:8001"
+    "controller_clone": "http://192.168.0.168:8001"
 }
 
 # Statistics tracking
