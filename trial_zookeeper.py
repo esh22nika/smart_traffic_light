@@ -11,8 +11,8 @@ from collections import deque
 # Configuration
 ZOOKEEPER_PORT = 6000
 CONTROLLERS = {
-    "controller": "http://192.168.0.168:8000",
-    "controller_clone": "http://192.168.0.169:8001"  # Clone on different port/IP
+    "controller": "http://localhost:8000",
+    "controller_clone": "http://localhost:8001"  # Clone on different port/IP
 }
 BUFFER_SIZE = 2  # Maximum concurrent requests per controller
 RESPONSE_TIMEOUT = 5
