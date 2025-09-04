@@ -8,7 +8,7 @@ from xmlrpc.client import ServerProxy
 from xmlrpc.server import SimpleXMLRPCServer
 
 # Updated configuration - now points to ZooKeeper
-ZOOKEEPER_IP = "http://192.168.0.170:6000"  # ZooKeeper endpoint instead of controller
+ZOOKEEPER_IP = "http://192.168.0.168:6000"  # ZooKeeper endpoint instead of controller
 MY_PORT = 7000
 MY_NAME = "t_signal"
 
