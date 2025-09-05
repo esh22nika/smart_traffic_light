@@ -1,270 +1,174 @@
-# t_signal.py (Updated for ZooKeeper load balancing)
-# Traffic client: Berkeley client + traffic sensing + VIP simulation
-# Now contacts ZooKeeper instead of controller directly
+# t_signal.py (Performance Optimized)
+# Traffic client with high-frequency requests to test dynamic scaling
 import time
 import random
 import threading
+import uuid
 from xmlrpc.client import ServerProxy
 from xmlrpc.server import SimpleXMLRPCServer
 
-# Updated configuration - now points to ZooKeeper
-ZOOKEEPER_IP = "http://192.168.0.168:6000"  # ZooKeeper endpoint instead of controller
+# -------------------------
+# CONFIGURATION
+# -------------------------
 MY_PORT = 7000
 MY_NAME = "t_signal"
+ZOOKEEPER_IP = "http://192.168.0.168:6000"
 
-# Initial skew: +45 minutes
-local_skew = 45 * 60
+# Initial clock skew: +30 minutes (in seconds)
+local_skew = 30 * 60
 
-signal_pairs = {
-    "1": [1, 2],
-    "2": [1, 2],
-    "3": [3, 4],
-    "4": [3, 4]
+# Simulation parameters
+VIP_PROBABILITY = 0.35  # 35% chance of a VIP vehicle
+REQUEST_INTERVAL_MIN = 2 # Minimum seconds between request bursts
+REQUEST_INTERVAL_MAX = 5 # Maximum seconds between request bursts
+REQUEST_BURST_SIZE = 2 # Number of requests to send in a quick burst
+
+signal_pairs = {"1": [1, 2], "2": [1, 2], "3": [3, 4], "4": [3, 4]}
+
+# Statistics tracking
+request_stats = {
+    "total_requests": 0,
+    "vip_requests": 0,
+    "normal_requests": 0,
+    "successful_requests": 0,
+    "failed_requests": 0,
+    "total_response_time": 0.0
 }
+stats_lock = threading.Lock()
 
-VIP_PROB = 0.35  # chance that the sensed vehicle is VIP (tweak for tests)
-
-# Enhanced traffic detection to create multiple concurrent requests
+# -------------------------
+# TRAFFIC SIMULATION LOGIC
+# -------------------------
 def traffic_detection_loop():
-    proxy = ServerProxy(ZOOKEEPER_IP, allow_none=True)
-    request_counter = 0
-    
+    """High-frequency traffic simulation to test load balancing and scaling."""
+    try:
+        proxy = ServerProxy(ZOOKEEPER_IP, allow_none=True)
+        proxy.ping() # Initial connection test
+        print(f"[{MY_NAME}] ✅ Successfully connected to ZooKeeper at {ZOOKEEPER_IP}")
+    except Exception as e:
+        print(f"[{MY_NAME}] ❌ FATAL: Could not connect to ZooKeeper at {ZOOKEEPER_IP}. Error: {e}")
+        return
+
     while True:
-        # Create multiple requests to test buffer functionality
-        num_requests = random.choice([1, 2])  # Send 1 or 2 requests at same time
+        print(f"\n[{MY_NAME}] 🚦 Generating a new burst of {REQUEST_BURST_SIZE} traffic requests...")
         
         threads = []
-        for i in range(num_requests):
-            request_counter += 1
-            thread = threading.Thread(
-                target=send_traffic_request, 
-                args=(proxy, request_counter, i == 0),  # First request gets delay
-                daemon=True
-            )
+        for i in range(REQUEST_BURST_SIZE):
+            thread = threading.Thread(target=send_traffic_request, args=(proxy, i + 1))
             threads.append(thread)
-        
-        # Start all requests nearly simultaneously
-        for thread in threads:
             thread.start()
-            time.sleep(0.1)  # Small delay between requests
-        
-        # Wait for all requests to complete
+            time.sleep(random.uniform(0.05, 0.2)) # Stagger requests slightly
+
         for thread in threads:
             thread.join()
         
-        # Wait before next batch of requests
-        time.sleep(random.randint(8, 12))
+        sleep_time = random.randint(REQUEST_INTERVAL_MIN, REQUEST_INTERVAL_MAX)
+        print(f"[{MY_NAME}] 💤 Burst complete. Waiting for {sleep_time} seconds...")
+        time.sleep(sleep_time)
 
+def send_traffic_request(proxy, burst_index):
+    """Sends a single normal or VIP traffic request to the ZooKeeper."""
+    sensed_signal = random.choice(list(signal_pairs.keys()))
+    target_pair = signal_pairs[sensed_signal]
+    start_time = time.time()
+    is_vip = random.random() < VIP_PROBABILITY
 
-def send_traffic_request(proxy, request_id, add_delay=False):
-    """Send individual traffic request to ZooKeeper"""
-    if add_delay:
-        time.sleep(random.randint(1, 3))  # Random delay for first request
-    
-    sensed = str(random.choice([1, 2, 3, 4]))
-    pair = signal_pairs[sensed]
-    
     try:
-        if random.random() < VIP_PROB:
-            # Generate unique VIP ID
-            vip_id = f"VIP-{request_id:03d}"
-            priority = random.choice([1, 2, 3, 4])  # Random VIP priority
-            
-            print(f"\n[{MY_NAME}] 🚨 VIP-{priority} detected at {pair} (ID: {vip_id}). Notifying ZooKeeper...")
-            start_time = time.time()
-            result = proxy.vip_arrival(pair, priority, vip_id)
-            end_time = time.time()
-            print(f"[{MY_NAME}] ✅ VIP request {vip_id} completed in {end_time-start_time:.2f}s")
+        if is_vip:
+            vehicle_id = f"VIP-{uuid.uuid4().hex[:6]}"
+            priority = random.randint(1, 4)
+            print(f"[{MY_NAME}] 🚨 Detected VIP vehicle {vehicle_id} (P{priority}) for {target_pair}")
+            result = proxy.vip_arrival(target_pair, priority, vehicle_id)
+            with stats_lock:
+                request_stats["vip_requests"] += 1
         else:
-            print(f"\n[{MY_NAME}] 🚦 Normal traffic at {sensed} (Req-{request_id:03d}). Requesting switch for {pair} via ZooKeeper")
-            start_time = time.time()
-            result = proxy.signal_controller(pair)
-            end_time = time.time()
-            print(f"[{MY_NAME}] ✅ Normal traffic request Req-{request_id:03d} completed in {end_time-start_time:.2f}s")
-            
-    except Exception as e:
-        print(f"[{MY_NAME}] ❌ Error contacting ZooKeeper for Req-{request_id:03d}: {e}")
+            print(f"[{MY_NAME}] 🚗 Detected normal traffic for {target_pair}")
+            result = proxy.signal_controller(target_pair)
+            with stats_lock:
+                request_stats["normal_requests"] += 1
 
-
-def enhanced_traffic_simulation():
-    """Enhanced simulation that creates concurrent load for testing buffer mechanism"""
-    proxy = ServerProxy(ZOOKEEPER_IP, allow_none=True)
-    
-    print(f"[{MY_NAME}] 🚀 Starting enhanced traffic simulation with concurrent requests")
-    print(f"[{MY_NAME}] 📊 VIP probability: {VIP_PROB*100:.0f}%")
-    
-    scenario_counter = 0
-    
-    while True:
-        scenario_counter += 1
-        scenario_type = random.choice([
-            "single_normal", 
-            "single_vip", 
-            "concurrent_mixed", 
-            "vip_storm",
-            "normal_burst"
-        ])
-        
-        print(f"\n[{MY_NAME}] 📋 === SCENARIO {scenario_counter}: {scenario_type.upper()} ===")
-        
-        if scenario_type == "single_normal":
-            send_single_request(proxy, "normal")
-            
-        elif scenario_type == "single_vip":
-            send_single_request(proxy, "vip")
-            
-        elif scenario_type == "concurrent_mixed":
-            # Send multiple requests simultaneously to test buffer
-            threads = []
-            for i in range(3):  # 3 concurrent requests
-                req_type = "vip" if random.random() < 0.4 else "normal"
-                thread = threading.Thread(
-                    target=send_single_request, 
-                    args=(proxy, req_type, f"CONC-{scenario_counter}-{i}"),
-                    daemon=True
-                )
-                threads.append(thread)
-            
-            # Start all threads nearly simultaneously
-            for thread in threads:
-                thread.start()
-                time.sleep(0.2)  # Small stagger
-            
-            # Wait for completion
-            for thread in threads:
-                thread.join()
-                
-        elif scenario_type == "vip_storm":
-            # Multiple high-priority VIPs to test deadlock handling
-            print(f"[{MY_NAME}] 🚨 VIP STORM: Multiple emergency vehicles!")
-            threads = []
-            for i in range(2):
-                thread = threading.Thread(
-                    target=send_single_request,
-                    args=(proxy, "vip", f"STORM-{scenario_counter}-{i}"),
-                    daemon=True
-                )
-                threads.append(thread)
-            
-            for thread in threads:
-                thread.start()
-                time.sleep(0.5)
-            
-            for thread in threads:
-                thread.join()
-                
-        elif scenario_type == "normal_burst":
-            # Burst of normal traffic to test load balancing
-            print(f"[{MY_NAME}] 📈 NORMAL BURST: Heavy traffic load!")
-            threads = []
-            for i in range(4):  # 4 normal requests
-                thread = threading.Thread(
-                    target=send_single_request,
-                    args=(proxy, "normal", f"BURST-{scenario_counter}-{i}"),
-                    daemon=True
-                )
-                threads.append(thread)
-            
-            for thread in threads:
-                thread.start()
-                time.sleep(0.3)
-            
-            for thread in threads:
-                thread.join()
-        
-        # Wait before next scenario
-        wait_time = random.randint(10, 15)
-        print(f"[{MY_NAME}] ⏳ Waiting {wait_time}s before next scenario...")
-        time.sleep(wait_time)
-
-
-def send_single_request(proxy, request_type, request_id=None):
-    """Send a single request to ZooKeeper"""
-    if request_id is None:
-        request_id = f"{request_type}-{int(time.time())}"
-    
-    sensed = str(random.choice([1, 2, 3, 4]))
-    pair = signal_pairs[sensed]
-    
-    try:
-        start_time = time.time()
-        
-        if request_type == "vip":
-            vip_id = f"VIP-{request_id}"
-            priority = random.choice([1, 2, 3])  # Higher priority VIPs
-            priority_name = {1: "AMBULANCE", 2: "FIRE_TRUCK", 3: "POLICE"}.get(priority, f"VIP_P{priority}")
-            
-            print(f"[{MY_NAME}] 🚨 {priority_name} at {pair} (ID: {vip_id}) → ZooKeeper")
-            result = proxy.vip_arrival(pair, priority, vip_id)
-            
-        else:  # normal
-            print(f"[{MY_NAME}] 🚦 Normal traffic at {sensed} ({request_id}) for {pair} → ZooKeeper")
-            result = proxy.signal_controller(pair)
-        
         end_time = time.time()
         response_time = end_time - start_time
         
-        print(f"[{MY_NAME}] ✅ Request {request_id} completed in {response_time:.2f}s")
-        
-        # Log slow responses (potential load balancing issues)
-        if response_time > 15:
-            print(f"[{MY_NAME}] ⚠️ SLOW RESPONSE detected for {request_id}: {response_time:.2f}s")
-            
+        print(f"[{MY_NAME}] ✅ Request successful in {response_time:.2f}s. Response: {result}")
+        with stats_lock:
+            request_stats["successful_requests"] += 1
+            request_stats["total_response_time"] += response_time
+
     except Exception as e:
-        print(f"[{MY_NAME}] ❌ Error with request {request_id}: {e}")
+        print(f"[{MY_NAME}] ❌ Request failed for {target_pair}. Error: {e}")
+        with stats_lock:
+            request_stats["failed_requests"] += 1
+    
+    with stats_lock:
+        request_stats["total_requests"] += 1
 
-
-# ---- Berkeley client methods (unchanged) ----
+# -------------------------
+# OPTIMIZED BERKELEY CLIENT METHODS
+# -------------------------
 def get_clock_value(server_time):
+    """Optimized Step 2 & 3: Return own_time - server_time faster"""
     own_time = time.time() + local_skew
-    diff = own_time - server_time
-    print(f"[{MY_NAME}] ⏱ get_clock_value → diff={diff:+.2f}s")
-    return diff
-
+    clock_value = own_time - server_time
+    return clock_value
 
 def set_time(new_time):
+    """Optimized Step 6 & 7: Set local clock to new_time faster"""
     global local_skew
-    now = time.time()
-    local_skew = new_time - now
-    print(f"[{MY_NAME}] ⏳ set_time → new_skew={local_skew:+.2f}s (local={time.ctime(now)})")
+    current_actual_time = time.time()
+    local_skew = new_time - current_actual_time
     return "OK"
 
+# -------------------------
+# UTILITY AND DEBUG METHODS
+# -------------------------
+def get_traffic_stats():
+    """RPC method to get local traffic signal statistics"""
+    with stats_lock:
+        stats_copy = request_stats.copy()
+    
+    stats_copy["local_time"] = format_time(time.time() + local_skew)
+    stats_copy["local_skew"] = f"{local_skew:+.2f}s"
+    if stats_copy["successful_requests"] > 0:
+        stats_copy["average_response_time"] = f"{stats_copy['total_response_time'] / stats_copy['successful_requests']:.2f}s"
+    else:
+        stats_copy["average_response_time"] = "N/A"
+    return stats_copy
 
-def get_status():
-    """Debug method to check t_signal status"""
-    return {
-        "name": MY_NAME,
-        "local_skew": local_skew,
-        "zookeeper_endpoint": ZOOKEEPER_IP,
-        "vip_probability": VIP_PROB
-    }
+def ping():
+    return f"{MY_NAME} OK"
 
+def format_time(ts):
+    return time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(ts))
 
-# ---- RPC server for Berkeley ----
+# -------------------------
+# MAIN ENTRY POINT
+# -------------------------
 if __name__ == "__main__":
     print("=" * 70)
-    print(f"🚦 TRAFFIC SIGNAL CLIENT [{MY_NAME}] STARTING")
+    print(f"🚗 OPTIMIZED TRAFFIC SIGNAL CLIENT [{MY_NAME}]")
     print("=" * 70)
-    print(f"[{MY_NAME}] 🌐 ZooKeeper endpoint: {ZOOKEEPER_IP}")
-    print(f"[{MY_NAME}] 📊 VIP probability: {VIP_PROB*100:.0f}%")
-    print(f"[{MY_NAME}] ⏱ Initial clock skew: {local_skew:+.2f}s")
+    print(f"[{MY_NAME}] ⚡ Performance optimized: High-frequency request bursts")
+    print(f"[{MY_NAME}] 🌐 Connecting to ZooKeeper: {ZOOKEEPER_IP}")
+    print(f"[{MY_NAME}] ⏱  Initial clock skew: {local_skew:+.2f}s")
+    print(f"[{MY_NAME}] 📈 Burst size: {REQUEST_BURST_SIZE} requests")
     print("=" * 70)
-    
-    # Start enhanced traffic simulation thread
-    simulation_thread = threading.Thread(target=enhanced_traffic_simulation, daemon=True)
+
+    # Start the main traffic simulation loop in a background thread
+    simulation_thread = threading.Thread(target=traffic_detection_loop, daemon=True)
     simulation_thread.start()
-    
-    # Start RPC server for Berkeley clock sync
+
+    # Start the RPC server to listen for requests from the controller
     server = SimpleXMLRPCServer(("0.0.0.0", MY_PORT), allow_none=True)
     server.register_function(get_clock_value, "get_clock_value")
     server.register_function(set_time, "set_time")
-    server.register_function(get_status, "get_status")
-    
-    print(f"[{MY_NAME}] 🚀 RPC server listening on port {MY_PORT}")
-    print(f"[{MY_NAME}] 🔄 Enhanced traffic simulation started")
-    print(f"[{MY_NAME}] 📡 All requests will go through ZooKeeper load balancer")
-    
+    server.register_function(get_traffic_stats, "get_traffic_stats")
+    server.register_function(ping, "ping")
+
+    print(f"[{MY_NAME}] 🚀 Traffic client ready on port {MY_PORT}")
+
     try:
         server.serve_forever()
     except KeyboardInterrupt:
-        print(f"\n[{MY_NAME}] 👋 Shutting down...")
+        print(f"\n[{MY_NAME}] Shutting down...")
+
