@@ -14,11 +14,11 @@ MY_NAME = "p_signal"
 # Initial clock skew: -45 minutes (in seconds)
 local_skew = -45 * 60
 
-# Load balancing awareness (for logging/debugging)
+# Load balancing awareness (for logging/debugging) - FIXED IP ADDRESS
 ZOOKEEPER_IP = "http://192.168.0.168:6000"
 CONTROLLERS = {
     "controller": "http://192.168.0.168:8000",
-    "controller_clone": "http://l192.168.0.168:8001"
+    "controller_clone": "http://192.168.0.168:8001"  # FIXED TYPO
 }
 
 # Statistics tracking
@@ -45,19 +45,19 @@ def p_signal(target_pair):
         request_stats["total_requests"] += 1
         request_stats["last_request_time"] = time.time()
     
-    print(f"[{MY_NAME}] 🚶‍♂️ Quick pedestrian check for {target_pair}")
+    print(f"[{MY_NAME}] Quick pedestrian check for {target_pair}")
     
     # Optimized pedestrian crossing check (reduced processing time)
     pedestrian_clear = check_pedestrian_crossing_fast(target_pair)
     
     if pedestrian_clear:
-        print(f"[{MY_NAME}] ✅ CLEAR for {target_pair} - VOTE: OK")
+        print(f"[{MY_NAME}] CLEAR for {target_pair} - VOTE: OK")
         with stats_lock:
             request_stats["normal_requests"] += 1
             request_stats["granted_requests"] += 1
         return "OK"
     else:
-        print(f"[{MY_NAME}] ❌ PEDESTRIANS DETECTED on {target_pair} - VOTE: DENY")
+        print(f"[{MY_NAME}] PEDESTRIANS DETECTED on {target_pair} - VOTE: DENY")
         with stats_lock:
             request_stats["denied_requests"] += 1
         return "DENY"
@@ -74,7 +74,7 @@ def check_pedestrian_crossing_fast(target_pair):
     is_clear = random.random() > 0.05
     
     if not is_clear:
-        print(f"[{MY_NAME}] 🚶‍♂️🚶‍♀️ Pedestrians crossing {target_pair}")
+        print(f"[{MY_NAME}] Pedestrians crossing {target_pair}")
     
     return is_clear
 
@@ -89,7 +89,7 @@ def enhanced_p_signal(target_pair, request_type="normal", requester_id="unknown"
         else:
             request_stats["normal_requests"] += 1
     
-    print(f"[{MY_NAME}] 🚶‍♂️ Enhanced check: {target_pair} ({request_type}) from {requester_id}")
+    print(f"[{MY_NAME}] Enhanced check: {target_pair} ({request_type}) from {requester_id}")
     
     return p_signal(target_pair)
 
@@ -101,7 +101,7 @@ def get_clock_value(server_time):
     """Optimized Step 2 & 3: Return own_time - server_time faster"""
     own_time = time.time() + local_skew
     clock_value = own_time - server_time
-    print(f"[{MY_NAME}] ⏱  get_clock_value → diff={clock_value:+.2f}s")
+    print(f"[{MY_NAME}] get_clock_value -> diff={clock_value:+.2f}s")
     return clock_value
 
 
@@ -110,7 +110,7 @@ def set_time(new_time):
     global local_skew
     current_actual_time = time.time()
     local_skew = new_time - current_actual_time
-    print(f"[{MY_NAME}] ⏳ set_time → new_skew={local_skew:+.2f}s")
+    print(f"[{MY_NAME}] set_time -> new_skew={local_skew:+.2f}s")
     return "OK"
 
 
@@ -154,10 +154,10 @@ def log_system_status():
             time_since_last = time.time() - last_req if last_req > 0 else 0
             success_rate = (granted / total) * 100
             
-            print(f"\n[{MY_NAME}] 📊 === PEDESTRIAN SYSTEM STATUS ===")
-            print(f"[{MY_NAME}] 📈 Total Votes: {total} | ✅ Granted: {granted} | ❌ Denied: {denied}")
-            print(f"[{MY_NAME}] 🎯 Success Rate: {success_rate:.1f}%")
-            print(f"[{MY_NAME}] ⏱  Last vote request: {time_since_last:.1f}s ago")
+            print(f"\n[{MY_NAME}] === PEDESTRIAN SYSTEM STATUS ===")
+            print(f"[{MY_NAME}] Total Votes: {total} | Granted: {granted} | Denied: {denied}")
+            print(f"[{MY_NAME}] Success Rate: {success_rate:.1f}%")
+            print(f"[{MY_NAME}] Last vote request: {time_since_last:.1f}s ago")
             print(f"[{MY_NAME}] ==========================================\n")
 
 
@@ -184,7 +184,7 @@ def get_real_time_data():
         return pedestrian_data
         
     except Exception as e:
-        print(f"[{MY_NAME}] ⚠ Could not fetch ZooKeeper data: {e}")
+        print(f"[{MY_NAME}] Could not fetch ZooKeeper data: {e}")
         with stats_lock:
             return {
                 "pedestrian_stats": request_stats.copy(),
@@ -198,12 +198,12 @@ def get_real_time_data():
 # -------------------------
 if __name__ == "__main__":
     print("=" * 70)
-    print(f"🚶‍♂️ OPTIMIZED PEDESTRIAN SIGNAL CLIENT [{MY_NAME}]")
+    print(f"OPTIMIZED PEDESTRIAN SIGNAL CLIENT [{MY_NAME}]")
     print("=" * 70)
-    print(f"[{MY_NAME}] ⚡ Performance optimized: Faster response times")
-    print(f"[{MY_NAME}] 🌐 ZooKeeper integration: {ZOOKEEPER_IP}")
-    print(f"[{MY_NAME}] ⏱  Initial clock skew: {local_skew:+.2f}s")
-    print(f"[{MY_NAME}] 📊 Enhanced RTO officer data access enabled")
+    print(f"[{MY_NAME}] Performance optimized: Faster response times")
+    print(f"[{MY_NAME}] ZooKeeper integration: {ZOOKEEPER_IP}")
+    print(f"[{MY_NAME}] Initial clock skew: {local_skew:+.2f}s")
+    print(f"[{MY_NAME}] Enhanced RTO officer data access enabled")
     print("=" * 70)
     
     # Start background threads
@@ -220,7 +220,7 @@ if __name__ == "__main__":
     server.register_function(get_real_time_data, "get_real_time_data")
     server.register_function(ping, "ping")
 
-    print(f"[{MY_NAME}] 🚀 Pedestrian client ready on port {MY_PORT}")
+    print(f"[{MY_NAME}] Pedestrian client ready on port {MY_PORT}")
 
     try:
         server.serve_forever()
